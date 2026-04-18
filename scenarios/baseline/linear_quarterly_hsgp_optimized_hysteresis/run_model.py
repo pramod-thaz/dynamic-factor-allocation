@@ -95,7 +95,7 @@ SLOW_EXIT_DAYS = 12
 REENTRY_PROB = 0.60
 REENTRY_DAYS = 5
 
-CRASH_DROP = 0.12  # -12% from 30-day high
+CRASH_DROP = 0.10  # -10% from 30-day high (more sensitive)
 
 print("=== ADVI GP + Probability Exits + HMM ===", flush=True)
 
@@ -111,10 +111,10 @@ def calculate_hmm_features(returns_df, prices_df):
     ma50 = returns_df['SPY'].rolling(50).mean()
     ma150 = returns_df['SPY'].rolling(150).mean()
     
-    features['trend_fast'] = (returns_df['SPY'] > ma50).astype(float)
-    features['trend_slow'] = (returns_df['SPY'] > ma150).astype(float)
+    features['trend_fast'] = returns_df['SPY'] / ma50 - 1
+    features['trend_slow'] = returns_df['SPY'] / ma150 - 1
     features['momentum'] = returns_df['SPY'].rolling(63).sum()
-    features['breadth'] = (returns_df['SPY'].rolling(50).mean() > 0).astype(float)
+    features['breadth'] = returns_df['SPY'].rolling(50).mean() / returns_df['SPY'].rolling(50).mean().shift(20) - 1
     features['vol_regime'] = returns_df['SHV'] - returns_df['SPY']
     
     def adx(price, period=14):
@@ -257,16 +257,41 @@ while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
     if quarterly_due:
         features_expanding = features.loc[:current_date]
         try:
-            hmm_quarterly = GaussianHMM(n_components=3, covariance_type='diag', n_iter=300, random_state=42)
-            hmm_quarterly.fit(features_expanding.values)
+            features_noisy = features_expanding.values + np.random.normal(0, 0.05, features_expanding.shape)
+            hmm_quarterly = GaussianHMM(n_components=3, covariance_type='diag', 
+                                    n_iter=150, random_state=42, covars_prior=0.01)
+            hmm_quarterly.fit(features_noisy)
             current_hmm = hmm_quarterly
             last_hmm_refit = current_date
-        except:
+        except Exception as e:
             pass
     
-    prob_bull = 0.5
-    prob_bear = 0.2
-    today_regime = pd.Series({'regime': 2, 'prob_bull': 0.5})
+    today_regime = pd.Series({'regime': 2, 'prob_bear': 0.33, 'prob_normal': 0.34, 'prob_bull': 0.33})
+    
+    if current_hmm is not None:
+        try:
+            idx_pos = features.index.get_indexer([current_date])[0]
+            if idx_pos >= 0:
+                today_features = features.iloc[[idx_pos]].values
+                probs = current_hmm.predict_proba(today_features)[0]
+                
+                if d_idx % 100 == 0:
+                    print(f"  HMM probs {current_date.date()}: raw={probs}")
+                
+                today_regime = pd.Series({
+                    'regime': probs.argmax(),
+                    'prob_bear': probs[0],
+                    'prob_normal': probs[1],
+                    'prob_bull': probs[2]
+                })
+        except Exception as e:
+            pass
+    
+    if today_regime is None:
+        today_regime = pd.Series({'regime': 2, 'prob_bear': 0.33, 'prob_normal': 0.34, 'prob_bull': 0.33})
+    
+    prob_bull = today_regime['prob_bull']
+    prob_bear = today_regime['prob_bear']
     
     force_rebalance = False
     override_allocation = None
@@ -274,7 +299,7 @@ while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
     # === LAYER 0: VOLATILITY SPIKE DETECTOR ===
     if current_allocation[2] < 0.85:
         vol_5d = daily_returns['SPY'].loc[current_date - pd.Timedelta(days=5):current_date].std() * np.sqrt(252)
-        if vol_5d > 0.60:
+        if vol_5d > 0.35:
             override_allocation = np.array([0.0, 0.0, 1.0])
             force_rebalance = True
             fast_exits_count += 1
