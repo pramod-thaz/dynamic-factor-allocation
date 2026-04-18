@@ -54,28 +54,24 @@ The model outputs trades in `next_trade.csv`:
 
 | Metric | Value |
 |--------|-------|
-| Annual Return | 13.8% |
-| Annual Vol | 18.5% |
-| Sharpe | 0.75 |
-| Max Drawdown | -22.6% |
-| Final Return | 183.3% |
-| SPY Buy-Hold | 229.3% |
-| Excess vs SPY | -46.0% |
+| Annual Return | 17.4% |
+| Annual Vol | 19.2% |
+| Sharpe | 0.91 |
+| Max Drawdown | -20.1% |
+| Final Return | 279.9% |
+| SPY Buy-Hold | 231.3% |
+| Excess vs SPY | +48.6% |
 
-> Note: HMM probabilities smoothed to prevent extreme 0/1 values
+> Note: HMM disabled - was causing 0.9 proc_bull issues; using fixed prob with vol/crash exit triggers
 
 ## Key Parameters
 
-- FAST_EXIT_PROB = 0.65
-- SLOW_EXIT_PROB = 0.48
-- REENTRY_PROB = 0.60
 - CRASH_DROP = 0.12 (30-day)
 - 10-day trigger = -15%
 - Vol spike = 60%
 
 ## Triggers
 
-- Quarterly rebalances: 52
-- Fast exits: 8
-- Re-entries: 5
+- Quarterly rebalances: 49
+- Fast exits: 5
 - Vol spike exit: 0 (threshold not reached)
