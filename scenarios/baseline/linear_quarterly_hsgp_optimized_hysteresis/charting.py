@@ -45,11 +45,15 @@ max_dd = drawdown.min()
 fig, axes = plt.subplots(4, 1, figsize=(14, 16), sharex=True)
 
 regime_colors = {0: 'red', 1: 'gray', 2: 'green'}
-current_regime = int(results['regime'].iloc[0])
+first_valid = results['regime'].dropna().iloc[0] if results['regime'].dropna().shape[0] > 0 else 2
+current_regime = int(first_valid)
 start_idx = 0
 
 for i in range(1, len(results)):
-    new_regime = int(results['regime'].iloc[i])
+    r = results['regime'].iloc[i]
+    if pd.isna(r):
+        continue
+    new_regime = int(r)
     if new_regime != current_regime or i == len(results) - 1:
         end_idx = i
         axes[0].axvspan(results.index[start_idx], results.index[end_idx],

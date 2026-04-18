@@ -54,13 +54,15 @@ The model outputs trades in `next_trade.csv`:
 
 | Metric | Value |
 |--------|-------|
-| Annual Return | 15.1% |
-| Annual Vol | 18.4% |
-| Sharpe | 0.82 |
+| Annual Return | 13.8% |
+| Annual Vol | 18.5% |
+| Sharpe | 0.75 |
 | Max Drawdown | -22.6% |
-| Final Return | 217.2% |
-| SPY Buy-Hold | 226.5% |
-| Excess vs SPY | -9.3% |
+| Final Return | 183.3% |
+| SPY Buy-Hold | 229.3% |
+| Excess vs SPY | -46.0% |
+
+> Note: HMM probabilities smoothed to prevent extreme 0/1 values
 
 ## Key Parameters
 
@@ -73,7 +75,7 @@ The model outputs trades in `next_trade.csv`:
 
 ## Triggers
 
-- Quarterly rebalances: 53
+- Quarterly rebalances: 52
 - Fast exits: 8
-- Re-entries: 6
+- Re-entries: 5
 - Vol spike exit: 0 (threshold not reached)
