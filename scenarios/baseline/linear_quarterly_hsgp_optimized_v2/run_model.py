@@ -7,7 +7,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 DATA_FILE = '/home/realdomarp/PYMC/FACTOR ROTATION/data/etf_data.csv'
-OUTPUT_DIR = '/home/realdomarp/PYMC/FACTOR ROTATION/scenarios/baseline/linear_quarterly_hsgp_optimized_hysteresis/output'
+OUTPUT_DIR = '/home/realdomarp/PYMC/FACTOR ROTATION/scenarios/baseline/linear_quarterly_hsgp_optimized_v2/output'
 
 TICKERS = ['SSO', 'SPY', 'SHV']
 
@@ -210,33 +210,17 @@ while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= pd.Timestamp(
     force_rebalance = False
     override_allocation = None
     
-    # === LAYER 0: VOLATILITY SPIKE DETECTOR ===
+    # Original version - simple crash detector (30d only, -12%)
     if current_allocation[2] < 0.85:
-        vol_5d = daily_returns['SPY'].loc[current_date - pd.Timedelta(days=5):current_date].std() * np.sqrt(252)
-        if vol_5d > 0.60:
-            override_allocation = np.array([0.0, 0.0, 1.0])
-            force_rebalance = True
-            fast_exits_count += 1
-            print(f"VOL SPIKE EXIT → {current_date.date()} → SHV (5d vol = {vol_5d:.1%})")
-            consecutive_fast = 0
-            consecutive_slow = 0
-            consecutive_reentry = 0
-    
-    # === LAYER 1: PRICE CRASH DETECTOR (immediate) ===
-    if current_allocation[2] < 0.85 and not force_rebalance:
         lookback_start = current_date - pd.Timedelta(days=30)
         if lookback_start in daily_prices.index:
             recent_high = daily_prices['SPY'].loc[lookback_start:current_date].max()
             price_drop_30d = (daily_prices['SPY'].loc[current_date] / recent_high) - 1
-            
-            # Also check 10-day return for sudden breaks
-            price_drop_10d = daily_returns['SPY'].loc[current_date - pd.Timedelta(days=10):current_date].sum()
-            
-            if price_drop_30d < -CRASH_DROP or price_drop_10d < -0.15:
+            if price_drop_30d < -CRASH_DROP:
                 override_allocation = np.array([0.0, 0.0, 1.0])
                 force_rebalance = True
                 fast_exits_count += 1
-                print(f"CRASH EXIT → {current_date.date()} → SHV (30d drop = {price_drop_30d:.1%}, 10d ret = {price_drop_10d:.1%})")
+                print(f"CRASH EXIT → {current_date.date()} → SHV (price drop = {price_drop_30d:.1%})")
                 consecutive_fast = 0
                 consecutive_slow = 0
                 consecutive_reentry = 0
