@@ -3,13 +3,85 @@ import numpy as np
 import pymc as pm
 from scipy.optimize import minimize
 from hmmlearn.hmm import GaussianHMM
+import yfinance as yf
 import warnings
+from datetime import timedelta, datetime
 warnings.filterwarnings('ignore')
 
 DATA_FILE = '/home/realdomarp/PYMC/FACTOR ROTATION/data/etf_data.csv'
 OUTPUT_DIR = '/home/realdomarp/PYMC/FACTOR ROTATION/scenarios/baseline/linear_quarterly_hsgp_optimized_hysteresis/output'
 
 TICKERS = ['SSO', 'SPY', 'SHV']
+
+def fetch_and_merge_data():
+    print("\nFetching latest data from yfinance...")
+    
+    try:
+        cached = pd.read_csv(DATA_FILE, index_col=0, parse_dates=True)
+        all_tickers = list(cached.columns)
+        print(f"Cache tickers: {all_tickers}")
+        print(f"Cache date range: {cached.index[0].date()} to {cached.index[-1].date()}")
+        
+        last_cached_date = cached.index[-1]
+        
+        if last_cached_date.date() >= (datetime.now() - timedelta(days=2)).date():
+            print("Cache is up to date, no fetch needed.")
+            return cached
+        
+        start_date = last_cached_date + timedelta(days=1)
+        end_date = datetime.now()
+        
+        print(f"Fetching {start_date.date()} to {end_date.date()}...")
+        
+        new_data = yf.download(all_tickers, start=start_date.strftime('%Y-%m-%d'), 
+                           end=end_date.strftime('%Y-%m-%d'), progress=False)
+        
+        if new_data.empty:
+            print("No new data fetched.")
+            return cached
+        
+        if 'Adj Close' in new_data.columns.get_level_values(0):
+            new_data = new_data['Adj Close']
+        else:
+            new_data = new_data['Close']
+        
+        new_data = new_data.dropna(how='all')
+        
+        if len(new_data) > 0:
+            combined = pd.concat([cached, new_data])
+            combined = combined[all_tickers]
+            combined = combined[~combined.index.duplicated(keep='last')]
+            combined = combined.sort_index()
+            combined.to_csv(DATA_FILE)
+            print(f"Updated cache: {combined.index[0].date()} to {combined.index[-1].date()}")
+            return combined
+        else:
+            print("No new data available.")
+            return cached
+            
+    except FileNotFoundError:
+        print("Cache not found, fetching full history from yfinance...")
+        all_tickers = ['GLD', 'IJR', 'MTUM', 'QUAL', 'SPY', 'TLT', 'USMV', 'VTV', 'VUG', 'SSO', 'HYG', 'LQD', 'SHV', 'QLD']
+        start_date = '2017-08-01'
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        
+        data = yf.download(all_tickers, start=start_date, end=end_date, progress=False)
+        if 'Adj Close' in data.columns.get_level_values(0):
+            data = data['Adj Close']
+        else:
+            data = data['Close']
+        
+        data = data.dropna(how='all')
+        data.to_csv(DATA_FILE)
+        print(f"Created cache: {data.index[0].date()} to {data.index[-1].date()}")
+        return data
+    
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        print("Falling back to cached data.")
+        if cached is not None:
+            return cached
+        raise
 
 HSGP_M = 20
 HSGP_C = 5.0
@@ -27,7 +99,7 @@ CRASH_DROP = 0.12  # -12% from 30-day high
 
 print("=== ADVI GP + Probability Exits + HMM ===", flush=True)
 
-data = pd.read_csv(DATA_FILE, index_col=0, parse_dates=True)
+data = fetch_and_merge_data()
 daily_prices = data[TICKERS]
 daily_returns = daily_prices.pct_change().dropna()
 
@@ -171,7 +243,10 @@ reentries = 0
 
 current_hmm = None
 
-while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= pd.Timestamp('2026-02-28'):
+end_date = daily_returns.index[-1]
+print(f"Backtest period: {daily_returns.index[63].date()} to {end_date.date()}")
+
+while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
     current_date = daily_returns.index[d_idx]
     
     days_since_last_rebal = (current_date - last_quarterly_rebal).days
@@ -371,6 +446,50 @@ results_df = pd.DataFrame({
              f'{(results["cum_ret"].iloc[-1] - spy_final)*100:.1f}%']
 })
 results_df.to_csv(f'{OUTPUT_DIR}/factor_rotation_backtest_results.csv', index=False)
+
+final_date = results.index[-1]
+final_alloc = results['allocation'].iloc[-1]
+final_action = "NO CHANGE"
+final_buy_sell = "NONE"
+
+prev_alloc = results['allocation'].iloc[-2] if len(results) > 1 else np.array([0.0, 0.0, 1.0])
+sso_diff = final_alloc[0] - prev_alloc[0]
+spy_diff = final_alloc[1] - prev_alloc[1]
+shv_diff = final_alloc[2] - prev_alloc[2]
+
+if abs(sso_diff) > 0.01 or abs(spy_diff) > 0.01 or abs(shv_diff) > 0.01:
+    action_signals = []
+    if sso_diff > 0.01:
+        action_signals.append(f"BUY SSO {sso_diff:.0%}")
+    elif sso_diff < -0.01:
+        action_signals.append(f"SELL SSO {abs(sso_diff):.0%}")
+    if spy_diff > 0.01:
+        action_signals.append(f"BUY SPY {spy_diff:.0%}")
+    elif spy_diff < -0.01:
+        action_signals.append(f"SELL SPY {abs(spy_diff):.0%}")
+    if shv_diff > 0.01:
+        action_signals.append(f"BUY SHV {shv_diff:.0%}")
+    elif shv_diff < -0.01:
+        action_signals.append(f"SELL SHV {abs(shv_diff):.0%}")
+    final_action = f"REBAL to SSO:{final_alloc[0]:.0%} SPY:{final_alloc[1]:.0%} SHV:{final_alloc[2]:.0%}"
+    final_buy_sell = ", ".join(action_signals)
+
+trade_signal = pd.DataFrame({
+    'date': [final_date],
+    'action': [final_action],
+    'buy_sell': [final_buy_sell],
+    'sso': [final_alloc[0]],
+    'spy': [final_alloc[1]],
+    'shv': [final_alloc[2]],
+    'regime': [results['regime'].iloc[-1]],
+    'prob_bull': [results['prob_bull'].iloc[-1]]
+})
+trade_signal.to_csv(f'{OUTPUT_DIR}/next_trade.csv', index=False)
+
+print(f"\nNEXT TRADE (as of {final_date.date()}):")
+print(f"  Action: {final_action}")
+print(f"  Trade: {final_buy_sell}")
+print(f"  Allocation: SSO {final_alloc[0]:.0%} | SPY {final_alloc[1]:.0%} | SHV {final_alloc[2]:.0%}")
 
 print("\nSaved!")
 print("=== DONE ===")

@@ -44,15 +44,28 @@ max_dd = drawdown.min()
 
 fig, axes = plt.subplots(4, 1, figsize=(14, 16), sharex=True)
 
+regime_colors = {0: 'red', 1: 'gray', 2: 'green'}
+current_regime = int(results['regime'].iloc[0])
+start_idx = 0
+
+for i in range(1, len(results)):
+    new_regime = int(results['regime'].iloc[i])
+    if new_regime != current_regime or i == len(results) - 1:
+        end_idx = i
+        axes[0].axvspan(results.index[start_idx], results.index[end_idx],
+                        alpha=0.2, color=regime_colors[current_regime], zorder=0)
+        start_idx = i
+        current_regime = new_regime
+
 axes[0].plot(results.index, cum_ret.values * 100, 
-            label=f'Strategy ({cum_ret.iloc[-1]*100:.1f}%)', linewidth=2, color='blue')
+            label=f'Strategy ({cum_ret.iloc[-1]*100:.1f}%)', linewidth=2, color='blue', zorder=1)
 axes[0].plot(spy_returns.index, spy_cum.values * 100, 
-            label=f'SPY Buy-Hold ({spy_cum.iloc[-1]*100:.1f}%)', linewidth=2, color='gray', alpha=0.7, linestyle='--')
+            label=f'SPY Buy-Hold ({spy_cum.iloc[-1]*100:.1f}%)', linewidth=2, color='gray', alpha=0.7, linestyle='--', zorder=1)
 axes[0].set_ylabel('Cumulative Return (%)')
 axes[0].set_title('Equity Curve - ADVI GP + Probability Exits + HMM Strategy')
 axes[0].legend(loc='upper left')
 axes[0].grid(True, alpha=0.3)
-axes[0].fill_between(results.index, 0, cum_ret.values * 100, alpha=0.1, color='blue')
+axes[0].fill_between(results.index, 0, cum_ret.values * 100, alpha=0.1, color='blue', zorder=1)
 
 axes[1].fill_between(results.index, drawdown.values, 0, color='red', alpha=0.5)
 axes[1].set_ylabel('Drawdown (%)')
