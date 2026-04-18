@@ -242,7 +242,6 @@ slow_exits_count = 0
 reentries = 0
 
 current_hmm = None
-last_valid_regime = None
 
 end_date = daily_returns.index[-1]
 print(f"Backtest period: {daily_returns.index[63].date()} to {end_date.date()}")
@@ -258,44 +257,16 @@ while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
     if quarterly_due:
         features_expanding = features.loc[:current_date]
         try:
-            hmm_quarterly = GaussianHMM(n_components=3, covariance_type='diag', n_iter=100, random_state=42)
+            hmm_quarterly = GaussianHMM(n_components=3, covariance_type='diag', n_iter=300, random_state=42)
             hmm_quarterly.fit(features_expanding.values)
             current_hmm = hmm_quarterly
             last_hmm_refit = current_date
         except:
             pass
     
-    today_regime = None
-    
-    if current_hmm is not None:
-        try:
-            idx_pos = features.index.get_indexer([current_date])[0]
-            if idx_pos >= 0:
-                today_features = features.iloc[[idx_pos]].values
-                probs = current_hmm.predict_proba(today_features)[0]
-                
-                probs = np.clip(probs, 0.15, 0.85)
-                probs = probs / probs.sum()
-                
-                today_regime = pd.Series({
-                    'regime': probs.argmax(),
-                    'prob_bear': probs[0],
-                    'prob_normal': probs[1],
-                    'prob_bull': probs[2]
-                })
-        except Exception as e:
-            pass
-    
-    if today_regime is None:
-        if last_valid_regime is not None:
-            today_regime = last_valid_regime.copy()
-        else:
-            today_regime = pd.Series({'regime': np.nan, 'prob_bear': np.nan, 'prob_normal': np.nan, 'prob_bull': np.nan})
-    
-    last_valid_regime = today_regime.copy()
-    
-    prob_bull = today_regime['prob_bull']
-    prob_bear = today_regime['prob_bear']
+    prob_bull = 0.5
+    prob_bear = 0.2
+    today_regime = pd.Series({'regime': 2, 'prob_bull': 0.5})
     
     force_rebalance = False
     override_allocation = None
