@@ -50,12 +50,12 @@ def fetch_and_merge_data():
         
         last_cached_date = cached.index[-1]
         
-        if last_cached_date.date() >= (datetime.now() - timedelta(days=2)).date():
-            print("Cache is up to date, no fetch needed.")
-            return cached
+        # Always try to fetch new data if cache is older than 1 day
+        if last_cached_date.date() >= (datetime.now() - timedelta(days=1)).date():
+            print("Cache is recent, but fetching latest data anyway...")
         
         start_date = last_cached_date + timedelta(days=1)
-        end_date = datetime.now()
+        end_date = min(datetime.now(), start_date + timedelta(days=10))
         
         print(f"Fetching {start_date.date()} to {end_date.date()}...")
         
