@@ -41,9 +41,9 @@ cat output/next_trade.csv
 | Annual Vol | 16.6% |
 | Sharpe | 1.18 |
 | Max Drawdown | -21.3% |
-| Final Return | 377.1% |
-| SPY Buy-Hold | 231.3% |
-| Excess vs SPY | +145.9% |
+| Final Return | 378.4% |
+| SPY Buy-Hold | 231.8% |
+| Excess vs SPY | +146.6% |
 
 ## Key Parameters
 
@@ -60,10 +60,11 @@ cat output/next_trade.csv
 
 - Quarterly rebalances: 85
 - Fast exits: 6
-- Re-entries: 47
+- Re-entries: 46
 
 ## Notes
 
+- Model is deterministic (fixed random seed for HMM noise)
 - 2018-2019 spent in SHV due to crash exit and slow HMM re-entry post-crash
 - Re-entry required prob_bull > 0.62 for 8 consecutive days
 - Min regime duration filter prevents over-trading but can delay re-entry after crashes

@@ -5,7 +5,22 @@ from hmmlearn.hmm import GaussianHMM
 import yfinance as yf
 import warnings
 from datetime import timedelta, datetime
+import argparse
 warnings.filterwarnings('ignore')
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Quarterly EMA + Smoothing V2')
+    parser.add_argument('--end-date', type=str, default=None,
+                       help='End date for backtest (YYYY-MM-DD). Default: latest available data')
+    parser.add_argument('--dry-run', action='store_true',
+                       help='Dry run mode - validate inputs without running backtest')
+    parser.add_argument('--as-of', type=str, default=None,
+                       help='Alias for --end-date')
+    return parser.parse_args()
+
+args = parse_args()
+END_DATE_ARG = args.end_date or args.as_of
+DRY_RUN = args.dry_run
 
 DATA_FILE = '/home/realdomarp/PYMC/FACTOR ROTATION/data/etf_data.csv'
 OUTPUT_DIR = '/home/realdomarp/PYMC/FACTOR ROTATION/scenarios/baseline/quarterly_ema_smoothing_v2/output'
@@ -95,6 +110,18 @@ def fetch_and_merge_data():
         raise
 
 print("=== Quarterly EMA + Smoothing V2 ===", flush=True)
+
+if END_DATE_ARG:
+    try:
+        END_DATE_PARSED = pd.Timestamp(END_DATE_ARG)
+        print(f"Running with end_date: {END_DATE_PARSED.date()}")
+    except:
+        print(f"ERROR: Invalid date format '{END_DATE_ARG}'. Use YYYY-MM-DD")
+        exit(1)
+
+if DRY_RUN:
+    print("Dry run mode - exiting after validation")
+    exit(0)
 
 data = fetch_and_merge_data()
 daily_prices = data[TICKERS]
@@ -198,7 +225,15 @@ reentries = 0
 
 current_hmm = None
 
-end_date = daily_returns.index[-1]
+if END_DATE_ARG:
+    end_date = END_DATE_PARSED
+    if end_date not in daily_returns.index:
+        available_dates = daily_returns.index
+        end_date = available_dates[available_dates <= end_date][-1]
+        print(f"Adjusted end_date to nearest trading day: {end_date.date()}")
+else:
+    end_date = daily_returns.index[-1]
+
 print(f"Backtest period: {daily_returns.index[63].date()} to {end_date.date()}")
 
 while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
@@ -211,6 +246,7 @@ while d_idx < len(daily_returns) and daily_returns.index[d_idx] <= end_date:
     if quarterly_due:
         features_expanding = features.loc[:current_date]
         try:
+            np.random.seed(42)
             features_noisy = features_expanding.values + np.random.normal(0, 0.05, features_expanding.shape)
             hmm_quarterly = GaussianHMM(n_components=3, covariance_type='diag', 
                                     n_iter=150, random_state=42, covars_prior=0.01)
